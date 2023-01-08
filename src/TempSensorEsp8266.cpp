@@ -5,11 +5,13 @@
 #include <arduino-timer.h>
 
 #define IOTWEBCONF_PASSWORD_LEN 65
+#include <Wire.h>
 #include <Adafruit_BME280.h>
 #include <IotWebConf.h>
 #include <IotWebConfTParameter.h>
 #include <IotWebConfUsing.h>  // This loads aliases for easier class names.
 #include <MQTT.h>
+#include <OneButton.h>
 
 // timer to check light status every second only
 auto timer = timer_create_default();
@@ -99,6 +101,21 @@ char mqttMessageBuffer[64];
 
 void connectMqtt();
 
+// ### OneButton ##############################################################
+// ############################################################################
+
+// counts of long button presses
+int longPressCount = 0;
+
+// OneButton: Handle long press stop
+void handleLongPressStop();
+
+OneButton btn = OneButton(
+    D3,     // Input pin for the button (we use the flash button)
+    true,  // Button is active LOW
+    true   // Enable internal pull-up resistor
+);
+
 // ##########################################
 // General Setup ############################
 // ##########################################
@@ -131,7 +148,11 @@ void setup() {
     // init sensor i2c
     bme.begin(0x76);
 
-    // check light condition every second
+    // attach button
+    btn.attachLongPressStop(handleLongPressStop);
+
+    // report sensor values every n seconds
+    // 60 seconds is recommended for weather monitoring
     long timeQueryIntervalMs = settingDelayParam.value() * 1000;
     Serial.println("Temp query interval ms: " + timeQueryIntervalMs);
     timer.every(timeQueryIntervalMs, checkTemp);
@@ -151,6 +172,7 @@ void loop() {
 
     timer.tick();
     iotWebConf.doLoop();
+    btn.tick();
 
     if (WiFi.isConnected()) {
         mqttClient.loop();
@@ -159,6 +181,7 @@ void loop() {
             connectMqtt();
         }
     }
+
 }
 
 /**
@@ -249,4 +272,25 @@ void handleRoot() {
     s += "</body></html>\n";
 
     server.send(200, "text/html", s);
+}
+
+
+void handleLongPressStop() {
+    longPressCount++;
+
+    if (longPressCount == 1) {
+        Serial.println("Button pressed to init reset - press again for 5 secs to reset");
+    }
+
+    if (longPressCount > 1) {
+        Serial.println("Reset config");
+
+        iotWebConf.getSystemParameterGroup()->applyDefaultValue();
+        iotWebConf.saveConfig();
+
+        Serial.println("Reset done, rebooting");
+        needReset = true;
+        delay(2000);
+    }
+
 }
