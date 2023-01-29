@@ -37,7 +37,7 @@ To build the project with PlatformIO use the following steps:
 
 ## Last Changes
 
-* 01/29/2023 Fhanged from BME280 to SHT31 sensor as BME280 is using temp values for correcting humidity readings. BME280 temp values are only "estimates" according to the sensors specs.
+* 01/29/2023 Changed from BME280 to SHT31 sensor as BME280 is using temp values for correcting humidity readings. BME280 temp values are only "estimates" according to the sensors specs.
 * 01/07/2023 First release no changes yet.
 
 ## License
