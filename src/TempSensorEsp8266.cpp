@@ -1,12 +1,12 @@
 /*
- *  Simple temperature/humidity/air pressure sensor based on BME280 with MQTT integration and IotWebConf support.
+ *  Simple temperature/humidity sensor based on SHT31 with MQTT integration and IotWebConf support.
  */
 #include <Arduino.h>
 #include <arduino-timer.h>
 
 #define IOTWEBCONF_PASSWORD_LEN 65
 #include <Wire.h>
-#include <Adafruit_BME280.h>
+#include <Adafruit_SHT31.h>
 #include <IotWebConf.h>
 #include <IotWebConfTParameter.h>
 #include <IotWebConfUsing.h>  // This loads aliases for easier class names.
@@ -72,20 +72,15 @@ iotwebconf::IntTParameter<int16_t> settingDelayParam =
 // Parameter for topic prefix
 iotwebconf::TextTParameter<STRING_LEN> settingMqttTopicPrefixParam = iotwebconf::Builder<iotwebconf::TextTParameter<STRING_LEN>>("settingMqttTopicPrefixParam").label("Topic prefix").defaultValue("sensor1").build();
 
-// BME280 sensor
-Adafruit_BME280 bme;
+// Sensor
+Adafruit_SHT31 sensor;
 
-// BME280 sensor values
-#define SEALEVELPRESSURE_HPA (1013.25)
+// Sensor values
 float sensorValueTemp = -1;
 float sensorValueHumidity = -1;
-float sensorValuePresure = -1;
-float sensorValueAltitude = -1;
 
 String sensorValueTempTopicStr;
 String sensorValueHumidityTopicStr;
-String sensorValuePresureTopicStr;
-String sensorValueAltitudeTopicStr;
 
 // WiFi Client
 WiFiClient wifiClient;
@@ -146,7 +141,8 @@ void setup() {
     server.onNotFound([]() { iotWebConf.handleNotFound(); });
 
     // init sensor i2c
-    bme.begin(0x76);
+    // set to 0x45 for alternate I2C address, 0x44 is default for SHT31
+    sensor.begin(0x44);
 
     // attach button
     btn.attachLongPressStop(handleLongPressStop);
@@ -194,10 +190,8 @@ bool checkTemp(void *argument) {
         return true;
     }
 
-    sensorValueTemp = bme.readTemperature();
-    sensorValueHumidity = bme.readHumidity();
-    sensorValuePresure = bme.readPressure() / 100.0F;
-    sensorValueAltitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+    sensorValueTemp = sensor.readTemperature();
+    sensorValueHumidity = sensor.readHumidity();
 
     if (isnan(sensorValueHumidity) || isnan(sensorValueTemp)) {
         Serial.println("Failed to read values from sensor!");
@@ -206,14 +200,14 @@ bool checkTemp(void *argument) {
 
     Serial.print("temp value: ");
     Serial.println(sensorValueTemp);
+    Serial.print("humidity value: ");
+    Serial.println(sensorValueHumidity);
 
     Serial.print("mqtt conntected: ");
     Serial.println(mqttClient.connected());
 
     mqttClient.publish(sensorValueTempTopicStr, String(sensorValueTemp));
-    mqttClient.publish(sensorValuePresureTopicStr, String(sensorValuePresure));
     mqttClient.publish(sensorValueHumidityTopicStr, String(sensorValueHumidity));
-    mqttClient.publish(sensorValueAltitudeTopicStr, String(sensorValueAltitude));    
 
     // keep timer running
     return true;
@@ -229,9 +223,7 @@ void wifiConnected() {
 
     // prepare topic names
     sensorValueTempTopicStr = "/" + String(settingMqttTopicPrefixParam.value()) + "/temp";
-    sensorValuePresureTopicStr = "/" + String(settingMqttTopicPrefixParam.value()) + "/pressure";
     sensorValueHumidityTopicStr = "/" + String(settingMqttTopicPrefixParam.value()) + "/humidity";
-    sensorValueAltitudeTopicStr = "/" + String(settingMqttTopicPrefixParam.value()) + "/altitude";
 }
 
 void connectMqtt() {
@@ -263,10 +255,6 @@ void handleRoot() {
     s += sensorValueTemp;
     s += "<li>Current value humiditiy: ";
     s += sensorValueHumidity;
-    s += "<li>Current value pressure: ";
-    s += sensorValuePresure;
-    s += "<li>Current value altitude: ";
-    s += sensorValueAltitude;
     s += "</ul>";
     s += "Go to <a href='config'>configure page</a> to change values.";
     s += "</body></html>\n";
